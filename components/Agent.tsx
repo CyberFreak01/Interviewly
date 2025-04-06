@@ -22,13 +22,13 @@ interface SavedMessage {
 }
 
 const Agent = ({
-                   userName,
-                   userId,
-                   interviewId,
-                   feedbackId,
-                   type,
-                   questions,
-               }: AgentProps) => {
+    userName,
+    userId,
+    interviewId,
+    feedbackId,
+    type,
+    questions,
+}: AgentProps) => {
     const router = useRouter();
     const [callStatus, setCallStatus] = useState<CallStatus>(CallStatus.INACTIVE);
     const [messages, setMessages] = useState<SavedMessage[]>([]);
@@ -61,8 +61,13 @@ const Agent = ({
             setIsSpeaking(false);
         };
 
-        const onError = (error: Error) => {
-            console.log("Error:", error);
+        const onError = (error: any) => {
+            console.log("Error object:", error);
+            try {
+                console.error("Error (stringified):", JSON.stringify(error));
+            } catch (e) {
+                console.error("Error (raw):", error?.message || error);
+            }
         };
 
         vapi.on("call-start", onCallStart);
@@ -117,26 +122,34 @@ const Agent = ({
     const handleCall = async () => {
         setCallStatus(CallStatus.CONNECTING);
 
-        if (type === "generate") {
-            await vapi.start(process.env.NEXT_PUBLIC_VAPI_WORKFLOW_ID!, {
-                variableValues: {
-                    username: userName,
-                    userid: userId,
-                },
-            });
-        } else {
-            let formattedQuestions = "";
-            if (questions) {
-                formattedQuestions = questions
-                    .map((question) => `- ${question}`)
-                    .join("\n");
-            }
+        try {
+            if (type === "generate") {
+                const workflowId = process.env.NEXT_PUBLIC_VAPI_WORKFLOW_ID;
+                if (!workflowId) {
+                    throw new Error("Missing NEXT_PUBLIC_VAPI_WORKFLOW_ID");
+                }
 
-            await vapi.start(interviewer, {
-                variableValues: {
-                    questions: formattedQuestions,
-                },
-            });
+                await vapi.start(workflowId, {
+                    variableValues: {
+                        username: userName,
+                        userid: userId,
+                    },
+                });
+            } else {
+                let formattedQuestions = "";
+                if (questions) {
+                    formattedQuestions = questions.map((q) => `- ${q}`).join("\n");
+                }
+
+                await vapi.start(interviewer, {
+                    variableValues: {
+                        questions: formattedQuestions,
+                    },
+                });
+            }
+        } catch (err) {
+            console.error("Call start failed:", err);
+            setCallStatus(CallStatus.INACTIVE);
         }
     };
 
@@ -197,18 +210,17 @@ const Agent = ({
             <div className="w-full flex justify-center">
                 {callStatus !== "ACTIVE" ? (
                     <button className="relative btn-call" onClick={() => handleCall()}>
-            <span
-                className={cn(
-                    "absolute animate-ping rounded-full opacity-75",
-                    callStatus !== "CONNECTING" && "hidden"
-                )}
-            />
-
+                        <span
+                            className={cn(
+                                "absolute animate-ping rounded-full opacity-75",
+                                callStatus !== "CONNECTING" && "hidden"
+                            )}
+                        />
                         <span className="relative">
-              {callStatus === "INACTIVE" || callStatus === "FINISHED"
-                  ? "Call"
-                  : ". . ."}
-            </span>
+                            {callStatus === "INACTIVE" || callStatus === "FINISHED"
+                                ? "Call"
+                                : ". . ."}
+                        </span>
                     </button>
                 ) : (
                     <button className="btn-disconnect" onClick={() => handleDisconnect()}>
